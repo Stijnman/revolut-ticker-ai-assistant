@@ -1,0 +1,37 @@
+{
+  "manifest_version": 3,
+  "name": "Revolut Ticker Agent",
+  "version": "1.0.0",
+  "description": "Detects stock tickers on Revolut Invest and shows investment signals",
+  "permissions": [
+    "storage",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://finnhub.io/*",
+    "https://www.revolut.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.revolut.com/*"],
+      "js": ["content.js", "ui/ai-copilot.js", "ui/news-sentiment.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}

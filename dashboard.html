@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Portfolio Health Dashboard</title>
+  <style>
+    body { 
+      font-family: system-ui; 
+      padding: 20px; 
+      max-width: 600px; 
+      margin: 0 auto;
+      background: #f8fafc;
+    }
+    .header { 
+      font-size: 22px; 
+      font-weight: 700; 
+      margin-bottom: 24px; 
+      color: #0f172a;
+    }
+    .portfolio-score {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 24px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .score-value {
+      font-size: 42px;
+      font-weight: 800;
+      color: #0f172a;
+    }
+    .score-label {
+      font-size: 14px;
+      color: #64748b;
+    }
+    .ticker-grid {
+      display: grid;
+      gap: 12px;
+    }
+    .ticker-card {
+      background: white;
+      border-radius: 10px;
+      padding: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .ticker-symbol {
+      font-weight: 700;
+      font-size: 16px;
+      color: #0f172a;
+    }
+    .ticker-price {
+      font-size: 15px;
+      color: #334155;
+    }
+    .signal-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+    }
+    .green { background: #22c55e; }
+    .red { background: #ef4444; }
+    .neutral { background: #94a3b8; }
+  </style>
+</head>
+<body>
+  <div class="header">Portfolio Health Dashboard</div>
+  
+  <div class="portfolio-score">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <div>
+        <div class="score-label">OVERALL HEALTH</div>
+        <div class="score-value" id="portfolioScore">--</div>
+      </div>
+      <div style="text-align: right;">
+        <div style="font-size: 13px; color: #64748b;">Tracked Tickers</div>
+        <div style="font-size: 24px; font-weight: 700;" id="tickerCount">0</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ticker-grid" id="tickerGrid">
+    <!-- Populated by JavaScript -->
+  </div>
+
+  <script src="dashboard.js"></script>
+</body>
+</html>

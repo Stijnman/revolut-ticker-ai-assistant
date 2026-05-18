@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body { width: 320px; padding: 16px; font-family: system-ui; }
+    .header { font-weight: bold; margin-bottom: 12px; }
+    .status { padding: 8px; background: #f0f0f0; border-radius: 6px; margin-bottom: 12px; }
+    .log { max-height: 200px; overflow-y: auto; font-size: 12px; }
+    button { padding: 8px 16px; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <div class="header">Revolut Ticker Agent</div>
+  
+  <div class="status">
+    <strong>Status:</strong> <span id="status">Active</span><br>
+    <strong>Tickers Tracked:</strong> <span id="count">0</span>
+  </div>
+  
+  <div class="log" id="log"></div>
+  
+  <button id="clear">Clear Memory</button>
+  
+  <script src="popup.js"></script>
+</body>
+</html>

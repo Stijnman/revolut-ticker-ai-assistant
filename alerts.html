@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Smart Alerts - Revolut Ticker Agent</title>
+  <style>
+    body { font-family: system-ui; padding: 20px; max-width: 500px; }
+    .header { font-size: 20px; font-weight: bold; margin-bottom: 20px; }
+    .alert-form { background: #f8fafc; padding: 16px; border-radius: 8px; margin-bottom: 20px; }
+    .alert-list { margin-top: 20px; }
+    .alert-item { 
+      background: white; 
+      border: 1px solid #e5e7eb; 
+      padding: 12px; 
+      margin-bottom: 8px; 
+      border-radius: 6px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    button { padding: 8px 16px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; }
+    button:hover { background: #2563eb; }
+    .delete-btn { background: #ef4444; padding: 4px 10px; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="header">Smart Alerts</div>
+  
+  <div class="alert-form">
+    <h4 style="margin-top: 0;">Create New Alert</h4>
+    
+    <div style="margin-bottom: 12px;">
+      <label>Ticker:</label><br>
+      <input type="text" id="ticker" placeholder="AAPL" style="width: 100%; padding: 8px; margin-top: 4px;">
+    </div>
+    
+    <div style="margin-bottom: 12px;">
+      <label>Alert Type:</label><br>
+      <select id="alertType" style="width: 100%; padding: 8px; margin-top: 4px;">
+        <option value="price_above">Price Above</option>
+        <option value="price_below">Price Below</option>
+        <option value="signal_change">Signal Change</option>
+      </select>
+    </div>
+    
+    <div style="margin-bottom: 16px;" id="valueField">
+      <label>Value:</label><br>
+      <input type="number" id="value" placeholder="250" style="width: 100%; padding: 8px; margin-top: 4px;">
+    </div>
+    
+    <button onclick="createAlert()">Create Alert</button>
+  </div>
+  
+  <div class="alert-list">
+    <h4>Active Alerts</h4>
+    <div id="alertList"></div>
+  </div>
+
+  <script src="alerts.js"></script>
+</body>
+</html>
