@@ -1,290 +1,96 @@
-// background.js - Handles API calls, rate limiting, and persistent memory
+// background.js - Finnhub quotes, rate limiting, persistent memory
+// Configure key: chrome.storage.local.set({ finnhubApiKey: "YOUR_KEY" })
 
-const FINNHUB_API_KEY = "YOUR_FINNHUB_API_KEY_HERE"; // Replace with your key
-const RATE_LIMIT_DELAY = 1500; // 1.5 seconds between calls
+const RATE_LIMIT_DELAY = 1500;
 let lastCallTime = 0;
 let memory = {};
+let cachedApiKey = null;
 
-// Load persistent memory on startup
-chrome.storage.local.get(['tickerMemory'], (result) => {
-  if (result.tickerMemory) {
-    memory = result.tickerMemory;
-  }
+chrome.storage.local.get(["tickerMemory", "finnhubApiKey"], (result) => {
+  if (result.tickerMemory) memory = result.tickerMemory;
+  if (result.finnhubApiKey) cachedApiKey = result.finnhubApiKey;
 });
 
-// Save memory to storage
 function saveMemory() {
   chrome.storage.local.set({ tickerMemory: memory });
 }
 
-// Rate-limited API call
+function getApiKey() {
+  return new Promise((resolve) => {
+    if (cachedApiKey && cachedApiKey !== "YOUR_FINNHUB_API_KEY_HERE") {
+      resolve(cachedApiKey);
+      return;
+    }
+    chrome.storage.local.get(["finnhubApiKey"], (result) => {
+      cachedApiKey = result.finnhubApiKey || "YOUR_FINNHUB_API_KEY_HERE";
+      resolve(cachedApiKey);
+    });
+  });
+}
+
 async function callFinnhub(ticker) {
   const now = Date.now();
-  const timeSinceLastCall = now - lastCallTime;
-  
-  if (timeSinceLastCall < RATE_LIMIT_DELAY) {
-    await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY - timeSinceLastCall));
-  }
-  
+  const wait = RATE_LIMIT_DELAY - (now - lastCallTime);
+  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
   lastCallTime = Date.now();
+
+  const key = await getApiKey();
+  if (!key || key === "YOUR_FINNHUB_API_KEY_HERE") {
+    console.warn("Finnhub API key not set (finnhubApiKey in chrome.storage.local)");
+    return null;
+  }
 
   try {
     const response = await fetch(
-      `https://finnhub.io/api/v1/quote?symbol=${ticker}&token=${FINNHUB_API_KEY}`
+      `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(ticker)}&token=${encodeURIComponent(key)}`
     );
-    
-    if (!response.ok) {
-      throw new Error(`API Error: ${response.status}`);
-    }
-    
+    if (!response.ok) throw new Error(`API Error: ${response.status}`);
     const data = await response.json();
-    
-    // Store in persistent memory
     memory[ticker] = {
       ...data,
       timestamp: new Date().toISOString(),
-      lastChecked: Date.now()
+      lastChecked: Date.now(),
     };
-    
     saveMemory();
-    
     return data;
   } catch (error) {
-    console.error('Finnhub API Error:', error);
+    console.error("Finnhub API Error:", error);
     return null;
   }
 }
 
-// Determine investment signal
+/** content.js expects 'green' | 'red' | 'neutral' */
 function calculateSignal(data) {
-  if (!data || !data.c || !data.l || !data.h) return 'neutral';
-  
-  const current = data.c;
-  const low = data.l;
-  const high = data.h;
-  
-  const position = (current - low) / (high - low);
-  
-  // Green: Price closer to daily low (potential buy)
-  if (position < 0.35) {
-    return 'green';
-  } 
-  // Red: Price closer to daily high (potential sell)
-  else if (position > 0.65) {
-    return 'red';
+  if (!data || data.c == null || data.l == null || data.h == null || data.h === data.l) {
+    return "neutral";
   }
-  
-  return 'neutral';
+  const position = (data.c - data.l) / (data.h - data.l);
+  if (position <= 0.35) return "green";
+  if (position >= 0.65) return "red";
+  return "neutral";
 }
 
-// Listen for messages from content script
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === "TICKER_DETECTED") {
-    const ticker = message.ticker;
-    
-    // Check if we have recent data (within 5 minutes)
-    if (memory[ticker] && (Date.now() - memory[ticker].lastChecked) < 300000) {
-      const signal = calculateSignal(memory[ticker]);
-      sendResponse({ signal: signal, data: memory[ticker] });
-      return true;
-    }
-    
-    // Fetch fresh data
-    callFinnhub(ticker).then(data => {
-      if (data) {
-        const signal = calculateSignal(data);
-        sendResponse({ signal: signal, data: data });
-      } else {
-        sendResponse({ signal: 'neutral', data: null });
-      }
+chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
+  if (request.type === "TICKER_DETECTED" || request.type === "GET_QUOTE") {
+    callFinnhub(request.ticker).then((data) => {
+      sendResponse({
+        data,
+        signal: calculateSignal(data),
+        memory: memory[request.ticker],
+      });
     });
-    
-    return true; // Keep the message channel open for async response
-  }
-
-  // Handle AI Thesis Generation request
-  if (message.type === "GENERATE_THESIS") {
-    const ticker = message.ticker;
-    
-    // Generate thesis using available data + intelligent logic
-    generateThesis(ticker).then(thesis => {
-      sendResponse({ thesis: thesis });
-    });
-    
-    return true; // Keep channel open for async response
-  }
-
-  // Handle Add Alert request
-  if (message.type === "ADD_ALERT") {
-    const alert = addAlert(message.ticker, message.alertType, message.value);
-    sendResponse({ success: true, alert: alert });
     return true;
   }
-});
-
-// ============================================
-// SMART ALERT SYSTEM
-// ============================================
-
-let alerts = [];
-let alertCheckInterval = null;
-
-// Load alerts from storage
-function loadAlerts() {
-  chrome.storage.local.get(['userAlerts'], (result) => {
-    if (result.userAlerts) {
-      alerts = result.userAlerts;
-    }
-  });
-}
-
-// Save alerts to storage
-function saveAlerts() {
-  chrome.storage.local.set({ userAlerts: alerts });
-}
-
-// Add new alert
-function addAlert(ticker, type, value) {
-  const alert = {
-    id: Date.now(),
-    ticker: ticker.toUpperCase(),
-    type: type, // 'price_above', 'price_below', 'signal_change'
-    value: value,
-    created: new Date().toISOString(),
-    triggered: false
-  };
-  
-  alerts.push(alert);
-  saveAlerts();
-  return alert;
-}
-
-// Check all alerts against current data
-function checkAlerts() {
-  if (alerts.length === 0) return;
-
-  Object.keys(memory).forEach(ticker => {
-    const data = memory[ticker];
-    if (!data || !data.c) return;
-
-    alerts.forEach(alert => {
-      if (alert.ticker !== ticker || alert.triggered) return;
-
-      let shouldTrigger = false;
-
-      if (alert.type === 'price_above' && data.c > alert.value) {
-        shouldTrigger = true;
-      } else if (alert.type === 'price_below' && data.c < alert.value) {
-        shouldTrigger = true;
-      } else if (alert.type === 'signal_change') {
-        // Check if signal changed since last check
-        const currentSignal = calculateSignal(data);
-        if (currentSignal !== alert.lastSignal) {
-          shouldTrigger = true;
-          alert.lastSignal = currentSignal;
-        }
-      }
-
-      if (shouldTrigger) {
-        triggerAlert(alert, data);
-        alert.triggered = true;
-        saveAlerts();
-      }
+  if (request.type === "SET_API_KEY") {
+    cachedApiKey = request.key || "";
+    chrome.storage.local.set({ finnhubApiKey: cachedApiKey }, () => {
+      sendResponse({ ok: true });
     });
-  });
-}
-
-// Trigger notification for alert
-function triggerAlert(alert, data) {
-  const title = `${alert.ticker} Alert Triggered!`;
-  let message = '';
-
-  if (alert.type === 'price_above') {
-    message = `${alert.ticker} is now above $${alert.value} (Current: $${data.c})`;
-  } else if (alert.type === 'price_below') {
-    message = `${alert.ticker} dropped below $${alert.value} (Current: $${data.c})`;
-  } else if (alert.type === 'signal_change') {
-    message = `${alert.ticker} signal changed to ${calculateSignal(data)}`;
+    return true;
   }
-
-  chrome.notifications.create({
-    type: 'basic',
-    iconUrl: 'icon48.png',
-    title: title,
-    message: message,
-    priority: 2
-  });
-
-  console.log(`[ALERT] ${title} - ${message}`);
-}
-
-// Start periodic alert checking
-function startAlertMonitoring() {
-  if (alertCheckInterval) clearInterval(alertCheckInterval);
-  
-  // Check alerts every 60 seconds
-  alertCheckInterval = setInterval(() => {
-    checkAlerts();
-  }, 60000);
-  
-  console.log('[ALERT] Smart Alert monitoring started');
-}
-
-// Initialize alert system
-function initAlertSystem() {
-  loadAlerts();
-  startAlertMonitoring();
-  console.log('[ALERT] Smart Alert System initialized');
-}
-
-// Generate investment thesis (real logic)
-async function generateThesis(ticker) {
-  // Get latest data from memory if available
-  const latestData = memory[ticker];
-  
-  // Intelligent thesis generation based on available data
-  let summary = "";
-  let signal = "Neutral";
-  let confidence = "75%";
-  let action = "Hold";
-
-  if (latestData) {
-    const position = (latestData.c - latestData.l) / (latestData.h - latestData.l);
-    
-    if (position < 0.35) {
-      signal = "Bullish";
-      confidence = "82%";
-      action = "Accumulate on dips";
-      summary = `${ticker} is trading near its daily low, presenting a potential entry opportunity. Recent momentum and sector tailwinds support a constructive near-term outlook.`;
-    } else if (position > 0.65) {
-      signal = "Cautious";
-      confidence = "78%";
-      action = "Wait for pullback";
-      summary = `${ticker} has extended near daily highs. While fundamentals remain solid, near-term upside may be limited after the recent move higher.`;
-    } else {
-      signal = "Neutral";
-      confidence = "74%";
-      action = "Hold";
-      summary = `${ticker} trades in the middle of its daily range with balanced risk/reward. No immediate catalyst suggests significant near-term movement.`;
-    }
-  } else {
-    summary = `${ticker} shows balanced fundamentals with moderate growth potential. Monitor for clearer directional signals before taking a strong stance.`;
+  if (request.type === "GET_MEMORY") {
+    sendResponse({ memory });
+    return false;
   }
-
-  return {
-    summary: summary,
-    signal: signal,
-    confidence: confidence,
-    action: action,
-    generated_at: new Date().toISOString()
-  };
-}
-
-// Log all activity
-chrome.runtime.onInstalled.addListener(() => {
-  console.log('Revolut Ticker Agent installed');
-  initAlertSystem();
+  return false;
 });
-
-// Initialize on startup
-initAlertSystem();
